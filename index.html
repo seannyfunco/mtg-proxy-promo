@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MTG League Rare Randomizer</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <h1>MTG League Rare Randomizer</h1>
+      <p class="subtitle">
+        Pick a set, generate 3 random rares, then assign one final card to a player.
+      </p>
+
+      <form id="randomizer-form" class="controls">
+        <label for="player-name">Player Name</label>
+        <input id="player-name" name="player-name" type="text" required placeholder="Enter player name" />
+
+        <label for="set-select">Magic Set</label>
+        <select id="set-select" name="set-select" required>
+          <option value="">Loading sets…</option>
+        </select>
+
+        <button id="generate-button" type="submit">Generate 3 Rare Cards</button>
+      </form>
+
+      <section aria-live="polite" id="status" class="status"></section>
+
+      <section>
+        <h2>Three Random Rare Options</h2>
+        <div id="card-list" class="card-list"></div>
+      </section>
+
+      <section>
+        <h2>Final Assigned Card</h2>
+        <div id="final-card" class="final-card empty">No card assigned yet.</div>
+      </section>
+    </main>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
