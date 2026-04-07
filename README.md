@@ -1,6 +1,6 @@
 # MTG Proxy Promo Randomizer
 
-A lightweight web app that helps run a Magic: The Gathering league promo process by:
+A lightweight web app that helps run a Magic: The Gathering league promo proxy assignment process by:
 
 1. Selecting a set from a dropdown.
 2. Fetching **3 different random Rare cards** from that set via Scryfall.
