@@ -9,6 +9,7 @@ A lightweight web app that helps run a Magic: The Gathering league promo proxy a
 ## Features
 
 - Player name input.
+- Safe rendering of user-provided player names via text nodes (no HTML injection).
 - Set picker populated directly from the Scryfall `/sets` endpoint.
 - Random rare generation using Scryfall `/cards/random` with set filtering.
 - Duplicate avoidance across the 3 candidate cards.
