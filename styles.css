@@ -1,0 +1,108 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: #10131a;
+  color: #f4f6ff;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at top, #222a42 0%, #10131a 50%);
+}
+
+.app {
+  max-width: 980px;
+  margin: 2rem auto;
+  padding: 1.5rem;
+  border-radius: 14px;
+  background: rgba(16, 19, 26, 0.95);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
+}
+
+h1,
+h2 {
+  margin-bottom: 0.5rem;
+}
+
+.subtitle {
+  margin-top: 0;
+  color: #b9c1da;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+input,
+select,
+button {
+  font: inherit;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #3a446a;
+  background: #1a2031;
+  color: #f4f6ff;
+}
+
+button {
+  cursor: pointer;
+  background: #4e68d8;
+  border-color: #4e68d8;
+  font-weight: 600;
+}
+
+button:hover {
+  background: #5e77de;
+}
+
+.status {
+  min-height: 1.5rem;
+  margin-bottom: 1.25rem;
+  color: #98f0cf;
+}
+
+.card-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.card {
+  background: #171c2b;
+  border: 1px solid #364169;
+  border-radius: 12px;
+  padding: 0.75rem;
+}
+
+.card img {
+  width: 100%;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.card h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.card p {
+  margin: 0.15rem 0;
+  color: #c5cce3;
+  font-size: 0.92rem;
+}
+
+.final-card {
+  border: 1px solid #4a58a0;
+  background: #1a2140;
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.final-card.empty {
+  color: #abb4d4;
+}
