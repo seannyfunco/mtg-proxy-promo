@@ -1,4 +1,25 @@
 const SCRYFALL_BASE_URL = "https://api.scryfall.com";
+const MIN_RARES_PER_SET = 3;
+const SET_ELIGIBILITY_CONCURRENCY = 8;
+const FETCH_RETRY_LIMIT = 3;
+const ELIGIBLE_SET_TYPES = new Set([
+  "core",
+  "expansion",
+  "masters",
+  "draft_innovation",
+  "commander",
+  "box",
+  "starter",
+  "funny",
+  "duel_deck",
+  "premium_deck",
+  "from_the_vault",
+  "spellbook",
+  "archenemy",
+  "planechase",
+  "vanguard"
+]);
+
 const setSelect = document.getElementById("set-select");
 const statusBox = document.getElementById("status");
 const cardList = document.getElementById("card-list");
@@ -7,6 +28,116 @@ const form = document.getElementById("randomizer-form");
 const generateButton = document.getElementById("generate-button");
 
 async function fetchSets() {
+  const { payload } = await fetchJsonWithRetry(`${SCRYFALL_BASE_URL}/sets`, {
+    retries: FETCH_RETRY_LIMIT,
+    errorMessage: "Could not load set list from Scryfall."
+  });
+
+  return payload.data
+    .filter((set) => {
+      if (set.digital || set.card_count < MIN_RARES_PER_SET) return false;
+      return ELIGIBLE_SET_TYPES.has(set.set_type);
+    })
+    .sort((a, b) => new Date(b.released_at) - new Date(a.released_at));
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchJsonWithRetry(
+  url,
+  {
+    retries = 2,
+    errorMessage = "Request failed.",
+    retryOnStatus = new Set([429, 500, 502, 503, 504]),
+    allow404 = false
+  } = {}
+) {
+  let lastError;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const response = await fetch(url);
+      if (allow404 && response.status === 404) return { status: 404, payload: null };
+
+      if (!response.ok) {
+        if (!retryOnStatus.has(response.status)) {
+          throw new Error(errorMessage);
+        }
+
+        throw new Error(`retryable-status-${response.status}`);
+      }
+
+      return { status: response.status, payload: await response.json() };
+    } catch (error) {
+      lastError = error;
+      if (attempt === retries) break;
+      await delay(250 * (attempt + 1));
+    }
+  }
+
+  if (lastError?.message?.startsWith("retryable-status-")) {
+    throw new Error(errorMessage);
+  }
+
+  throw new Error(`${errorMessage} Please check your connection and try again.`);
+}
+
+async function countPaperRaresInSet(setCode) {
+  const query = encodeURIComponent(`set:${setCode} rarity:rare game:paper`);
+  const result = await fetchJsonWithRetry(
+    `${SCRYFALL_BASE_URL}/cards/search?q=${query}&unique=cards&page=1`,
+    {
+      retries: FETCH_RETRY_LIMIT,
+      errorMessage: "Could not validate set rare counts.",
+      allow404: true
+    }
+  );
+
+  if (result.status === 404) {
+    return 0;
+  }
+
+  const { payload } = result;
+  return payload.total_cards ?? 0;
+}
+
+async function filterEligibleSets(sets) {
+  const eligibleSets = [];
+  let cursor = 0;
+  let completed = 0;
+
+  async function worker() {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= sets.length) return;
+
+      const set = sets[index];
+
+      try {
+        const rareCount = await countPaperRaresInSet(set.code);
+        if (rareCount >= MIN_RARES_PER_SET) {
+          eligibleSets.push(set);
+        }
+      } catch (error) {
+        // Ignore individual set-check failures and continue.
+        console.warn(`Skipping set ${set.code}:`, error);
+      } finally {
+        completed += 1;
+        showStatus(`Checking set eligibility ${completed}/${sets.length}…`);
+      }
+    }
+  }
+
+  const workerCount = Math.min(SET_ELIGIBILITY_CONCURRENCY, sets.length);
+  const workers = Array.from({ length: workerCount }, () => worker());
+  await Promise.all(workers);
+
+  const setOrder = new Map(sets.map((set, index) => [set.code, index]));
+  eligibleSets.sort((a, b) => setOrder.get(a.code) - setOrder.get(b.code));
+  return eligibleSets;
   const response = await fetch(`${SCRYFALL_BASE_URL}/sets`);
   if (!response.ok) {
     throw new Error("Could not load set list from Scryfall.");
@@ -41,6 +172,14 @@ function getCardImage(card) {
   return "";
 }
 
+function buildInfoLine(label, value) {
+  const paragraph = document.createElement("p");
+  const strong = document.createElement("strong");
+  strong.textContent = `${label}: `;
+  paragraph.append(strong, value);
+  return paragraph;
+}
+
 function renderCandidateCards(cards) {
   cardList.innerHTML = "";
 
@@ -57,6 +196,15 @@ function renderCandidateCards(cards) {
       wrapper.append(image);
     }
 
+    const title = document.createElement("h3");
+    title.textContent = card.name;
+    wrapper.append(title);
+
+    wrapper.append(
+      buildInfoLine("Set", `${card.set_name} (${card.set.toUpperCase()})`),
+      buildInfoLine("Rarity", card.rarity),
+      buildInfoLine("Mana Cost", card.mana_cost || "N/A")
+    );
     wrapper.innerHTML += `
       <h3>${card.name}</h3>
       <p><strong>Set:</strong> ${card.set_name} (${card.set.toUpperCase()})</p>
@@ -70,6 +218,34 @@ function renderCandidateCards(cards) {
 
 function renderFinalAssignment(card, playerName) {
   finalCard.classList.remove("empty");
+  finalCard.innerHTML = "";
+
+  finalCard.append(
+    buildInfoLine("Player", playerName),
+    buildInfoLine("Assigned Card", card.name)
+  );
+
+  const scryfallLine = document.createElement("p");
+  const label = document.createElement("strong");
+  label.textContent = "Scryfall: ";
+
+  const link = document.createElement("a");
+  link.href = card.scryfall_uri;
+  link.target = "_blank";
+  link.rel = "noreferrer noopener";
+  link.textContent = "View card details";
+
+  scryfallLine.append(label, link);
+  finalCard.append(scryfallLine);
+}
+
+async function fetchRandomRareFromSet(setCode) {
+  const query = encodeURIComponent(`set:${setCode} rarity:rare game:paper unique:cards`);
+  const { payload } = await fetchJsonWithRetry(`${SCRYFALL_BASE_URL}/cards/random?q=${query}`, {
+    retries: FETCH_RETRY_LIMIT,
+    errorMessage: "Failed to fetch random rare card."
+  });
+  return payload;
   finalCard.innerHTML = `
     <p><strong>Player:</strong> ${playerName}</p>
     <p><strong>Assigned Card:</strong> ${card.name}</p>
@@ -153,6 +329,14 @@ form.addEventListener("submit", async (event) => {
   showStatus("Loading set list…");
 
   try {
+    const candidateSets = await fetchSets();
+    const eligibleSets = await filterEligibleSets(candidateSets);
+
+    if (eligibleSets.length === 0) {
+      throw new Error("No eligible sets found with at least three paper rares.");
+    }
+
+    buildSetOptions(eligibleSets);
     const sets = await fetchSets();
     buildSetOptions(sets);
     showStatus("Ready!");
