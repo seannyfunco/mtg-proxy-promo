@@ -138,6 +138,16 @@ async function filterEligibleSets(sets) {
   const setOrder = new Map(sets.map((set, index) => [set.code, index]));
   eligibleSets.sort((a, b) => setOrder.get(a.code) - setOrder.get(b.code));
   return eligibleSets;
+  const response = await fetch(`${SCRYFALL_BASE_URL}/sets`);
+  if (!response.ok) {
+    throw new Error("Could not load set list from Scryfall.");
+  }
+
+  const payload = await response.json();
+
+  return payload.data
+    .filter((set) => set.card_count > 0)
+    .sort((a, b) => new Date(b.released_at) - new Date(a.released_at));
 }
 
 function buildSetOptions(sets) {
@@ -195,6 +205,12 @@ function renderCandidateCards(cards) {
       buildInfoLine("Rarity", card.rarity),
       buildInfoLine("Mana Cost", card.mana_cost || "N/A")
     );
+    wrapper.innerHTML += `
+      <h3>${card.name}</h3>
+      <p><strong>Set:</strong> ${card.set_name} (${card.set.toUpperCase()})</p>
+      <p><strong>Rarity:</strong> ${card.rarity}</p>
+      <p><strong>Mana Cost:</strong> ${card.mana_cost || "N/A"}</p>
+    `;
 
     cardList.append(wrapper);
   });
@@ -230,6 +246,22 @@ async function fetchRandomRareFromSet(setCode) {
     errorMessage: "Failed to fetch random rare card."
   });
   return payload;
+  finalCard.innerHTML = `
+    <p><strong>Player:</strong> ${playerName}</p>
+    <p><strong>Assigned Card:</strong> ${card.name}</p>
+    <p><strong>Scryfall:</strong> <a href="${card.scryfall_uri}" target="_blank" rel="noreferrer">View card details</a></p>
+  `;
+}
+
+async function fetchRandomRareFromSet(setCode) {
+  const query = encodeURIComponent(`set:${setCode} rarity:rare game:paper`);
+  const response = await fetch(`${SCRYFALL_BASE_URL}/cards/random?q=${query}`);
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch random rare card.");
+  }
+
+  return response.json();
 }
 
 async function getThreeUniqueRares(setCode) {
@@ -305,6 +337,8 @@ form.addEventListener("submit", async (event) => {
     }
 
     buildSetOptions(eligibleSets);
+    const sets = await fetchSets();
+    buildSetOptions(sets);
     showStatus("Ready!");
   } catch (error) {
     setSelect.innerHTML = `<option value="">Could not load sets</option>`;
