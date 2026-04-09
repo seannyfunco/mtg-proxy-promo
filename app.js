@@ -63,10 +63,7 @@ async function fetchJsonWithRetry(
 
       if (!response.ok) {
         if (!retryOnStatus.has(response.status)) {
-          const nonRetryableError = new Error(errorMessage);
-          nonRetryableError.nonRetryable = true;
-          nonRetryableError.httpStatus = response.status;
-          throw nonRetryableError;
+          throw new Error(errorMessage);
         }
 
         throw new Error(`retryable-status-${response.status}`);
@@ -75,13 +72,9 @@ async function fetchJsonWithRetry(
       return { status: response.status, payload: await response.json() };
     } catch (error) {
       lastError = error;
-      if (error?.nonRetryable || attempt === retries) break;
+      if (attempt === retries) break;
       await delay(250 * (attempt + 1));
     }
-  }
-
-  if (lastError?.nonRetryable) {
-    throw new Error(`${errorMessage} (HTTP ${lastError.httpStatus})`);
   }
 
   if (lastError?.message?.startsWith("retryable-status-")) {
@@ -112,7 +105,6 @@ async function countPaperRaresInSet(setCode) {
 
 async function filterEligibleSets(sets) {
   const eligibleSets = [];
-  const failedSetCodes = [];
   let cursor = 0;
   let completed = 0;
 
@@ -130,8 +122,8 @@ async function filterEligibleSets(sets) {
           eligibleSets.push(set);
         }
       } catch (error) {
-        failedSetCodes.push(set.code);
-        console.warn(`Eligibility check failed for set ${set.code}:`, error);
+        // Ignore individual set-check failures and continue.
+        console.warn(`Skipping set ${set.code}:`, error);
       } finally {
         completed += 1;
         showStatus(`Checking set eligibility ${completed}/${sets.length}…`);
@@ -143,15 +135,19 @@ async function filterEligibleSets(sets) {
   const workers = Array.from({ length: workerCount }, () => worker());
   await Promise.all(workers);
 
-  if (failedSetCodes.length > 0) {
-    throw new Error(
-      `Could not validate ${failedSetCodes.length} set(s) from Scryfall. Please retry so the set list is complete.`
-    );
-  }
-
   const setOrder = new Map(sets.map((set, index) => [set.code, index]));
   eligibleSets.sort((a, b) => setOrder.get(a.code) - setOrder.get(b.code));
   return eligibleSets;
+  const response = await fetch(`${SCRYFALL_BASE_URL}/sets`);
+  if (!response.ok) {
+    throw new Error("Could not load set list from Scryfall.");
+  }
+
+  const payload = await response.json();
+
+  return payload.data
+    .filter((set) => set.card_count > 0)
+    .sort((a, b) => new Date(b.released_at) - new Date(a.released_at));
 }
 
 function buildSetOptions(sets) {
@@ -209,6 +205,12 @@ function renderCandidateCards(cards) {
       buildInfoLine("Rarity", card.rarity),
       buildInfoLine("Mana Cost", card.mana_cost || "N/A")
     );
+    wrapper.innerHTML += `
+      <h3>${card.name}</h3>
+      <p><strong>Set:</strong> ${card.set_name} (${card.set.toUpperCase()})</p>
+      <p><strong>Rarity:</strong> ${card.rarity}</p>
+      <p><strong>Mana Cost:</strong> ${card.mana_cost || "N/A"}</p>
+    `;
 
     cardList.append(wrapper);
   });
@@ -244,6 +246,22 @@ async function fetchRandomRareFromSet(setCode) {
     errorMessage: "Failed to fetch random rare card."
   });
   return payload;
+  finalCard.innerHTML = `
+    <p><strong>Player:</strong> ${playerName}</p>
+    <p><strong>Assigned Card:</strong> ${card.name}</p>
+    <p><strong>Scryfall:</strong> <a href="${card.scryfall_uri}" target="_blank" rel="noreferrer">View card details</a></p>
+  `;
+}
+
+async function fetchRandomRareFromSet(setCode) {
+  const query = encodeURIComponent(`set:${setCode} rarity:rare game:paper`);
+  const response = await fetch(`${SCRYFALL_BASE_URL}/cards/random?q=${query}`);
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch random rare card.");
+  }
+
+  return response.json();
 }
 
 async function getThreeUniqueRares(setCode) {
@@ -319,6 +337,8 @@ form.addEventListener("submit", async (event) => {
     }
 
     buildSetOptions(eligibleSets);
+    const sets = await fetchSets();
+    buildSetOptions(sets);
     showStatus("Ready!");
   } catch (error) {
     setSelect.innerHTML = `<option value="">Could not load sets</option>`;
