@@ -1,5 +1,6 @@
 const SCRYFALL_BASE_URL = "https://api.scryfall.com";
 const MIN_RARES_PER_SET = 3;
+const RECENT_YEARS_LIMIT = 2;
 const SET_ELIGIBILITY_CONCURRENCY = 8;
 const FETCH_RETRY_LIMIT = 3;
 const ELIGIBLE_SET_TYPES = new Set([
@@ -27,10 +28,19 @@ const finalCard = document.getElementById("final-card");
 const progressContainer = document.getElementById("progress-container");
 const setProgress = document.getElementById("set-progress");
 const progressText = document.getElementById("progress-text");
+const includeCommanderCheckbox = document.getElementById("include-commander");
 const form = document.getElementById("randomizer-form");
 const generateButton = document.getElementById("generate-button");
 
-async function fetchSets() {
+function isWithinRecentYears(releaseDate, yearsBack = RECENT_YEARS_LIMIT) {
+  if (!releaseDate) return false;
+  const now = new Date();
+  const cutoff = new Date(now);
+  cutoff.setFullYear(now.getFullYear() - yearsBack);
+  return new Date(releaseDate) >= cutoff;
+}
+
+async function fetchSets({ includeCommander = false } = {}) {
   const { payload } = await fetchJsonWithRetry(`${SCRYFALL_BASE_URL}/sets`, {
     retries: FETCH_RETRY_LIMIT,
     errorMessage: "Could not load set list from Scryfall."
@@ -39,7 +49,10 @@ async function fetchSets() {
   return payload.data
     .filter((set) => {
       if (set.digital || set.card_count < MIN_RARES_PER_SET) return false;
-      return ELIGIBLE_SET_TYPES.has(set.set_type);
+      if (!ELIGIBLE_SET_TYPES.has(set.set_type)) return false;
+      if (!isWithinRecentYears(set.released_at)) return false;
+      if (!includeCommander && set.set_type === "commander") return false;
+      return true;
     })
     .sort((a, b) => new Date(b.released_at) - new Date(a.released_at));
 }
@@ -319,12 +332,14 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-(async function initialize() {
+async function loadEligibleSets() {
+  const includeCommander = includeCommanderCheckbox.checked;
   showStatus("Loading set list…");
   showProgress(0, 100, "Loading candidate sets…");
+  setSelect.innerHTML = `<option value="">Loading sets…</option>`;
 
   try {
-    const candidateSets = await fetchSets();
+    const candidateSets = await fetchSets({ includeCommander });
     showProgress(0, candidateSets.length, "Validating sets for rare availability…");
     const eligibleSets = await filterEligibleSets(candidateSets);
 
@@ -340,4 +355,10 @@ form.addEventListener("submit", async (event) => {
     hideProgress();
     showStatus(error.message || "Failed to initialize app.", true);
   }
-})();
+}
+
+includeCommanderCheckbox.addEventListener("change", () => {
+  loadEligibleSets();
+});
+
+loadEligibleSets();
