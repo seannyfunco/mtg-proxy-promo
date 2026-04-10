@@ -24,6 +24,9 @@ const setSelect = document.getElementById("set-select");
 const statusBox = document.getElementById("status");
 const cardList = document.getElementById("card-list");
 const finalCard = document.getElementById("final-card");
+const progressContainer = document.getElementById("progress-container");
+const setProgress = document.getElementById("set-progress");
+const progressText = document.getElementById("progress-text");
 const form = document.getElementById("randomizer-form");
 const generateButton = document.getElementById("generate-button");
 
@@ -63,7 +66,10 @@ async function fetchJsonWithRetry(
 
       if (!response.ok) {
         if (!retryOnStatus.has(response.status)) {
-          throw new Error(errorMessage);
+          const nonRetryableError = new Error(errorMessage);
+          nonRetryableError.nonRetryable = true;
+          nonRetryableError.httpStatus = response.status;
+          throw nonRetryableError;
         }
 
         throw new Error(`retryable-status-${response.status}`);
@@ -72,9 +78,13 @@ async function fetchJsonWithRetry(
       return { status: response.status, payload: await response.json() };
     } catch (error) {
       lastError = error;
-      if (attempt === retries) break;
+      if (error?.nonRetryable || attempt === retries) break;
       await delay(250 * (attempt + 1));
     }
+  }
+
+  if (lastError?.nonRetryable) {
+    throw new Error(`${errorMessage} (HTTP ${lastError.httpStatus})`);
   }
 
   if (lastError?.message?.startsWith("retryable-status-")) {
@@ -105,6 +115,7 @@ async function countPaperRaresInSet(setCode) {
 
 async function filterEligibleSets(sets) {
   const eligibleSets = [];
+  const failedSetCodes = [];
   let cursor = 0;
   let completed = 0;
 
@@ -122,11 +133,12 @@ async function filterEligibleSets(sets) {
           eligibleSets.push(set);
         }
       } catch (error) {
-        // Ignore individual set-check failures and continue.
-        console.warn(`Skipping set ${set.code}:`, error);
+        failedSetCodes.push(set.code);
+        console.warn(`Eligibility check failed for set ${set.code}:`, error);
       } finally {
         completed += 1;
         showStatus(`Checking set eligibility ${completed}/${sets.length}…`);
+        showProgress(completed, sets.length, `Validating set ${completed} of ${sets.length}…`);
       }
     }
   }
@@ -135,19 +147,15 @@ async function filterEligibleSets(sets) {
   const workers = Array.from({ length: workerCount }, () => worker());
   await Promise.all(workers);
 
+  if (failedSetCodes.length > 0) {
+    throw new Error(
+      `Could not validate ${failedSetCodes.length} set(s) from Scryfall. Please retry so the set list is complete.`
+    );
+  }
+
   const setOrder = new Map(sets.map((set, index) => [set.code, index]));
   eligibleSets.sort((a, b) => setOrder.get(a.code) - setOrder.get(b.code));
   return eligibleSets;
-  const response = await fetch(`${SCRYFALL_BASE_URL}/sets`);
-  if (!response.ok) {
-    throw new Error("Could not load set list from Scryfall.");
-  }
-
-  const payload = await response.json();
-
-  return payload.data
-    .filter((set) => set.card_count > 0)
-    .sort((a, b) => new Date(b.released_at) - new Date(a.released_at));
 }
 
 function buildSetOptions(sets) {
@@ -164,6 +172,18 @@ function buildSetOptions(sets) {
 function showStatus(message, isError = false) {
   statusBox.textContent = message;
   statusBox.style.color = isError ? "#ff9da2" : "#98f0cf";
+}
+
+function showProgress(current, total, message = "") {
+  progressContainer.classList.remove("hidden");
+  const safeTotal = Math.max(total, 1);
+  setProgress.max = safeTotal;
+  setProgress.value = Math.min(current, safeTotal);
+  progressText.textContent = message || `Validated ${current} of ${total} sets.`;
+}
+
+function hideProgress() {
+  progressContainer.classList.add("hidden");
 }
 
 function getCardImage(card) {
@@ -205,25 +225,16 @@ function renderCandidateCards(cards) {
       buildInfoLine("Rarity", card.rarity),
       buildInfoLine("Mana Cost", card.mana_cost || "N/A")
     );
-    wrapper.innerHTML += `
-      <h3>${card.name}</h3>
-      <p><strong>Set:</strong> ${card.set_name} (${card.set.toUpperCase()})</p>
-      <p><strong>Rarity:</strong> ${card.rarity}</p>
-      <p><strong>Mana Cost:</strong> ${card.mana_cost || "N/A"}</p>
-    `;
 
     cardList.append(wrapper);
   });
 }
 
-function renderFinalAssignment(card, playerName) {
+function renderFinalAssignment(card) {
   finalCard.classList.remove("empty");
   finalCard.innerHTML = "";
 
-  finalCard.append(
-    buildInfoLine("Player", playerName),
-    buildInfoLine("Assigned Card", card.name)
-  );
+  finalCard.append(buildInfoLine("Assigned Card", card.name));
 
   const scryfallLine = document.createElement("p");
   const label = document.createElement("strong");
@@ -246,22 +257,6 @@ async function fetchRandomRareFromSet(setCode) {
     errorMessage: "Failed to fetch random rare card."
   });
   return payload;
-  finalCard.innerHTML = `
-    <p><strong>Player:</strong> ${playerName}</p>
-    <p><strong>Assigned Card:</strong> ${card.name}</p>
-    <p><strong>Scryfall:</strong> <a href="${card.scryfall_uri}" target="_blank" rel="noreferrer">View card details</a></p>
-  `;
-}
-
-async function fetchRandomRareFromSet(setCode) {
-  const query = encodeURIComponent(`set:${setCode} rarity:rare game:paper`);
-  const response = await fetch(`${SCRYFALL_BASE_URL}/cards/random?q=${query}`);
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch random rare card.");
-  }
-
-  return response.json();
 }
 
 async function getThreeUniqueRares(setCode) {
@@ -297,11 +292,10 @@ function chooseRandomCard(cards) {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const playerName = document.getElementById("player-name").value.trim();
   const setCode = setSelect.value;
 
-  if (!playerName || !setCode) {
-    showStatus("Please enter a player name and choose a set.", true);
+  if (!setCode) {
+    showStatus("Please choose a set.", true);
     return;
   }
 
@@ -316,8 +310,8 @@ form.addEventListener("submit", async (event) => {
     renderCandidateCards(candidates);
 
     const assignedCard = chooseRandomCard(candidates);
-    renderFinalAssignment(assignedCard, playerName);
-    showStatus(`Assigned ${assignedCard.name} to ${playerName}.`);
+    renderFinalAssignment(assignedCard);
+    showStatus(`Assigned ${assignedCard.name}.`);
   } catch (error) {
     showStatus(error.message || "Unexpected error while generating cards.", true);
   } finally {
@@ -327,9 +321,11 @@ form.addEventListener("submit", async (event) => {
 
 (async function initialize() {
   showStatus("Loading set list…");
+  showProgress(0, 100, "Loading candidate sets…");
 
   try {
     const candidateSets = await fetchSets();
+    showProgress(0, candidateSets.length, "Validating sets for rare availability…");
     const eligibleSets = await filterEligibleSets(candidateSets);
 
     if (eligibleSets.length === 0) {
@@ -337,11 +333,11 @@ form.addEventListener("submit", async (event) => {
     }
 
     buildSetOptions(eligibleSets);
-    const sets = await fetchSets();
-    buildSetOptions(sets);
+    hideProgress();
     showStatus("Ready!");
   } catch (error) {
     setSelect.innerHTML = `<option value="">Could not load sets</option>`;
+    hideProgress();
     showStatus(error.message || "Failed to initialize app.", true);
   }
 })();

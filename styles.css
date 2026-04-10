@@ -65,6 +65,31 @@ button:hover {
   color: #98f0cf;
 }
 
+.progress-container {
+  margin-bottom: 1.25rem;
+}
+
+.progress-container.hidden {
+  display: none;
+}
+
+.progress-container label {
+  display: block;
+  margin-bottom: 0.45rem;
+  color: #c5cce3;
+}
+
+.progress-container progress {
+  width: 100%;
+  height: 0.9rem;
+}
+
+.progress-text {
+  margin: 0.5rem 0 0;
+  color: #b5bfde;
+  font-size: 0.9rem;
+}
+
 .card-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

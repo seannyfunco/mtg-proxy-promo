@@ -14,9 +14,6 @@
       </p>
 
       <form id="randomizer-form" class="controls">
-        <label for="player-name">Player Name</label>
-        <input id="player-name" name="player-name" type="text" required placeholder="Enter player name" />
-
         <label for="set-select">Magic Set</label>
         <select id="set-select" name="set-select" required>
           <option value="">Loading sets…</option>
@@ -26,6 +23,11 @@
       </form>
 
       <section aria-live="polite" id="status" class="status"></section>
+      <section id="progress-container" class="progress-container" aria-live="polite">
+        <label for="set-progress">Set validation progress</label>
+        <progress id="set-progress" max="100" value="0"></progress>
+        <p id="progress-text" class="progress-text">Preparing set checks…</p>
+      </section>
 
       <section>
         <h2>Three Random Rare Options</h2>
