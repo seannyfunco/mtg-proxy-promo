@@ -37,22 +37,6 @@ h2 {
   margin-bottom: 1.25rem;
 }
 
-.checkbox-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.checkbox-row input[type="checkbox"] {
-  width: auto;
-}
-
-.set-hint {
-  margin: 0;
-  color: #b5bfde;
-  font-size: 0.9rem;
-}
-
 input,
 select,
 button {
