@@ -1,3 +1,5 @@
+# mtg-proxy-promo
+A web tool to help assign a proxy rare promo card for Magic the Gathering Sealed leagues using booster packs instead of Pre-Release Kits.
 # MTG Proxy Promo Randomizer
 
 A lightweight web app that helps run a Magic: The Gathering league promo process by:
@@ -11,7 +13,6 @@ A lightweight web app that helps run a Magic: The Gathering league promo process
 - Set picker populated from Scryfall and restricted to sets released within the past 2 years that have at least 3 paper rares.
 - Optional toggle to include Commander sets in the eligible-set pool.
 - Progress bar while set eligibility validation is in progress.
-- Graceful fallback: if Scryfall eligibility checks fail, the app can still show recent sets with a warning.
 - Random rare generation using Scryfall `/cards/random` with set filtering.
 - Duplicate avoidance across the 3 candidate cards.
 - Final assigned-card display with a direct Scryfall link.
@@ -34,7 +35,7 @@ Then open <http://localhost:8000>.
 
 ## Hostverge Deployment
 
-This app is static (HTML/CSS/JS), so on Hostverge you can deploy by uploading:
+This app is static (HTML/CSS/JS), so on webhost you can deploy by uploading:
 
 - `index.html`
 - `styles.css`

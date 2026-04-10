@@ -160,9 +160,15 @@ async function filterEligibleSets(sets) {
   const workers = Array.from({ length: workerCount }, () => worker());
   await Promise.all(workers);
 
+  if (failedSetCodes.length > 0) {
+    throw new Error(
+      `Could not validate ${failedSetCodes.length} set(s) from Scryfall. Please retry so the set list is complete.`
+    );
+  }
+
   const setOrder = new Map(sets.map((set, index) => [set.code, index]));
   eligibleSets.sort((a, b) => setOrder.get(a.code) - setOrder.get(b.code));
-  return { eligibleSets, failedSetCount: failedSetCodes.length };
+  return eligibleSets;
 }
 
 function buildSetOptions(sets) {
@@ -335,24 +341,7 @@ async function loadEligibleSets() {
   try {
     const candidateSets = await fetchSets({ includeCommander });
     showProgress(0, candidateSets.length, "Validating sets for rare availability…");
-    const { eligibleSets, failedSetCount } = await filterEligibleSets(candidateSets);
-
-    if (failedSetCount > 0) {
-      showStatus(
-        `Validated with warnings: ${failedSetCount} set checks failed. Showing available validated sets.`,
-        true
-      );
-    }
-
-    if (eligibleSets.length === 0 && candidateSets.length > 0) {
-      buildSetOptions(candidateSets);
-      hideProgress();
-      showStatus(
-        "Set validation service is unavailable. Showing recent sets without rare-count validation.",
-        true
-      );
-      return;
-    }
+    const eligibleSets = await filterEligibleSets(candidateSets);
 
     if (eligibleSets.length === 0) {
       throw new Error("No eligible sets found with at least three paper rares.");
@@ -360,9 +349,7 @@ async function loadEligibleSets() {
 
     buildSetOptions(eligibleSets);
     hideProgress();
-    if (failedSetCount === 0) {
-      showStatus("Ready!");
-    }
+    showStatus("Ready!");
   } catch (error) {
     setSelect.innerHTML = `<option value="">Could not load sets</option>`;
     hideProgress();
