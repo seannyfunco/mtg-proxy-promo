@@ -1,15 +1,13 @@
 # MTG Proxy Promo Randomizer
 
-A lightweight web app that helps run a Magic: The Gathering league promo process by:
+A lightweight web app that helps run a Magic: The Gathering league promo proxy assignment process by:
 
 1. Selecting a set from a dropdown.
 2. Fetching **3 different random Rare cards** from that set via Scryfall.
 3. Randomly assigning one of those 3 rares to a player.
 
 ## Features
-
-- Set picker populated from Scryfall and restricted to sets that have at least 3 paper rares.
-- Progress bar while set eligibility validation is in progress.
+- Set picker populated directly from the Scryfall `/sets` endpoint.
 - Random rare generation using Scryfall `/cards/random` with set filtering.
 - Duplicate avoidance across the 3 candidate cards.
 - Final assigned-card display with a direct Scryfall link.
